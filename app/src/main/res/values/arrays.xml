@@ -2,5 +2,6 @@
 <resources>
     <string-array name="xposed_scope">
         <item>com.mobile.legends</item>
+        <item>com.fpsbooster.mlbb</item>
     </string-array>
 </resources>

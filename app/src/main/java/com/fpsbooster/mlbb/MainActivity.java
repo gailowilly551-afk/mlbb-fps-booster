@@ -1,5 +1,6 @@
 package com.fpsbooster.mlbb;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -26,19 +27,24 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.fpsbooster.mlbb.shizuku.ShizukuShellRunner;
+import com.fpsbooster.mlbb.shizuku.ShizukuShellRunner.DisplayModeSpec;
+import com.fpsbooster.mlbb.xposed.DeviceSpoofHook;
 import com.fpsbooster.mlbb.xposed.SpoofProfiles;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import rikka.shizuku.Shizuku;
 
 /**
- * Main UI for configuring Transsion bypass, Shizuku 165 FPS commands, and LSPatch spoof profiles.
+ * Main controller UI for MLBB 165 FPS Unlocker, Dynamic Display/PowerHAL Booster, and Deep Spoofer.
  */
+@SuppressLint("SetTextI18n")
 public class MainActivity extends Activity {
 
     private static final int REQ_CODE_SHIZUKU = 1001;
@@ -53,17 +59,20 @@ public class MainActivity extends Activity {
     private static final int ACCENT_GREEN = Color.parseColor("#00E676");
     private static final int ACCENT_CYAN = Color.parseColor("#38BDF8");
     private static final int ACCENT_AMBER = Color.parseColor("#F59E0B");
+    private static final int ACCENT_PURPLE = Color.parseColor("#A855F7");
     private static final int ACCENT_RED = Color.parseColor("#EF4444");
     private static final int BTN_DARK = Color.parseColor("#1E293B");
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
+    private String originalHardwareModel;
     private TextView deviceInfoView;
     private TextView shizukuStatusBadge;
     private TextView spoofStatusView;
     private TextView logConsoleView;
     private Button shizukuAuthBtn;
+    private Button applyNativePeakBtn;
 
     private final Shizuku.OnBinderReceivedListener binderReceivedListener =
             () -> mainHandler.post(this::refreshAllStatus);
@@ -75,23 +84,33 @@ public class MainActivity extends Activity {
             (requestCode, grantResult) -> mainHandler.post(() -> {
                 refreshAllStatus();
                 if (requestCode == REQ_CODE_SHIZUKU) {
-                    appendLog(grantResult == PackageManager.PERMISSION_GRANTED
-                            ? "Shizuku permission GRANTED."
-                            : "Shizuku permission DENIED.");
+                    if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                        appendLog("Shizuku permission GRANTED. Auto-syncing spoof profile bridge...");
+                        SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(loadSavedProfileId());
+                        runShizukuTask(
+                                "Syncing profile bridge (" + p.model + ")...",
+                                () -> ShizukuShellRunner.syncProfileBridge(p));
+                    } else {
+                        appendLog("Shizuku permission DENIED.");
+                    }
                 }
             });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        originalHardwareModel = Build.BRAND + " " + Build.MODEL;
         setContentView(buildUi());
+
+        // Ensure preferences file is readable by XSharedPreferences & SpoofConfigProvider on startup
+        saveSelectedProfile(loadSavedProfileId(), false);
 
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
         Shizuku.addBinderDeadListener(binderDeadListener);
         Shizuku.addRequestPermissionResultListener(permissionResultListener);
 
         refreshAllStatus();
-        appendLog("Ready. Tap 'BYPASS & SPOOF TRANSSION (SHIZUKU)' to lock 144Hz & apply spoofed device_name.");
+        appendLog("Ready. Select your target profile & tap 'APPLY FULL SPOOF + REAL MAX FPS + BOOST'.");
     }
 
     @Override
@@ -117,11 +136,11 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(16);
-        root.setPadding(pad, dp(36), pad, dp(28));
+        root.setPadding(pad, dp(42), pad, dp(36));
 
-        TextView title = makeText("MLBB 165 FPS Unlocker & Transsion Spoofer", 19, TEXT_PRIMARY, true);
+        TextView title = makeText("MLBB 165 FPS Unlocker & Deep Spoofer", 19, TEXT_PRIMARY, true);
         TextView subtitle = makeText(
-                "Android 16 Shizuku Controller + LSPatch Transsion Hook",
+                "Dynamic Hz Controller + PowerHAL Boost + Deep Device/GPU Spoofer",
                 12, ACCENT_CYAN, false);
         subtitle.setPadding(0, dp(2), 0, dp(14));
         root.addView(title);
@@ -129,60 +148,86 @@ public class MainActivity extends Activity {
 
         // Card 1: Device & Display Monitor
         LinearLayout card1 = createCard();
-        card1.addView(makeSectionHeader("1. DEVICE & DISPLAY MONITOR", ACCENT_CYAN));
-        deviceInfoView = makeText("Loading display modes...", 13, TEXT_PRIMARY, false);
+        card1.addView(makeSectionHeader("1. LIVE DEVICE, DISPLAY & SPOOF MONITOR", ACCENT_CYAN));
+        deviceInfoView = makeText("Loading display modes...", 12, TEXT_PRIMARY, false);
         deviceInfoView.setTypeface(Typeface.MONOSPACE);
         deviceInfoView.setPadding(0, dp(6), 0, dp(8));
         card1.addView(deviceInfoView);
 
-        Button refreshMonitorBtn = makeButton("REFRESH MONITOR", BTN_DARK, TEXT_PRIMARY);
+        Button refreshMonitorBtn = makeButton("REFRESH LIVE MONITOR", BTN_DARK, TEXT_PRIMARY);
         refreshMonitorBtn.setOnClickListener(v -> refreshAllStatus());
         card1.addView(refreshMonitorBtn);
         root.addView(card1);
 
         // Card 2: Shizuku Engine
         LinearLayout card2 = createCard();
-        card2.addView(makeSectionHeader("2. SHIZUKU ENGINE (SAFE / SYSTEM API)", ACCENT_GREEN));
+        card2.addView(makeSectionHeader("2. SHIZUKU REAL FPS & PERFORMANCE ENGINE", ACCENT_GREEN));
         shizukuStatusBadge = makeText("Checking Shizuku...", 13, ACCENT_AMBER, true);
         shizukuStatusBadge.setPadding(0, dp(6), 0, dp(10));
         card2.addView(shizukuStatusBadge);
-
-        Button bypassTranssionBtn = makeButton(
-                "BYPASS & SPOOF TRANSSION (SHIZUKU)", ACCENT_AMBER, Color.BLACK);
-        bypassTranssionBtn.setOnClickListener(v -> {
-            SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(loadSavedProfileId());
-            runShizukuTask(
-                    "Running Transsion bypass + spoofing device_name to " + p.model + "...",
-                    () -> ShizukuShellRunner.applyTranssionSpoofAnd165Unlock(p.model));
-        });
-        card2.addView(bypassTranssionBtn);
 
         shizukuAuthBtn = makeButton("REQUEST SHIZUKU PERMISSION", BTN_DARK, ACCENT_CYAN);
         shizukuAuthBtn.setOnClickListener(v -> handleShizukuAuth());
         card2.addView(shizukuAuthBtn);
 
-        Button apply165Btn = makeButton("APPLY 165 FPS COMMANDS (SHIZUKU)", ACCENT_GREEN, Color.BLACK);
-        apply165Btn.setOnClickListener(v -> runShizukuTask(
-                "Applying 165 FPS + Performance Mode...",
-                ShizukuShellRunner::apply165FpsCommands));
-        card2.addView(apply165Btn);
+        Button fullUnlockBtn = makeButton(
+                "APPLY FULL SPOOF + REAL MAX FPS + BOOST (SHIZUKU)", ACCENT_GREEN, Color.BLACK);
+        fullUnlockBtn.setOnClickListener(v -> {
+            SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(loadSavedProfileId());
+            DisplayModeSpec hwPeak = detectPeakDisplayModeSpec();
+            String ds = loadSavedDownscale();
+            runShizukuTask(
+                    "Applying Full Spoof (" + p.model + ") + Peak Mode ("
+                            + hwPeak.width + "x" + hwPeak.height + "@" + hwPeak.roundedHz
+                            + "Hz) + GameOverlay " + Math.round(p.targetRefreshRate) + "FPS...",
+                    () -> ShizukuShellRunner.applyFullSpoofAndUnlock(p, hwPeak, ds));
+        });
+        card2.addView(fullUnlockBtn);
 
-        Button apply144Btn = makeButton("LOCK 144Hz NATIVE HARDWARE PEAK", ACCENT_CYAN, Color.BLACK);
-        apply144Btn.setOnClickListener(v -> runShizukuTask(
-                "Locking 144Hz Native Hardware Peak...",
-                ShizukuShellRunner::apply144HzHardwarePeak));
-        card2.addView(apply144Btn);
+        DisplayModeSpec detectedPeak = detectPeakDisplayModeSpec();
+        applyNativePeakBtn = makeButton(
+                "LOCK NATIVE HARDWARE PEAK (" + detectedPeak.roundedHz + "Hz EXACT)",
+                ACCENT_CYAN, Color.BLACK);
+        applyNativePeakBtn.setOnClickListener(v -> {
+            DisplayModeSpec hwPeak = detectPeakDisplayModeSpec();
+            String ds = loadSavedDownscale();
+            runShizukuTask(
+                    "Locking Native Hardware Peak (" + hwPeak.exactRefreshRate + " Hz)...",
+                    () -> ShizukuShellRunner.applyNativeHardwarePeak(hwPeak, ds));
+        });
+        card2.addView(applyNativePeakBtn);
 
-        Button checkCfgBtn = makeButton("CHECK CURRENT FPS CONFIG", BTN_DARK, TEXT_PRIMARY);
+        Button aotBoostBtn = makeButton(
+                "AOT SPEED COMPILE + RAM & POWERHAL BOOST (ANTI-LAG)", ACCENT_AMBER, Color.BLACK);
+        aotBoostBtn.setOnClickListener(v -> runShizukuTask(
+                "Running AOT DEX Speed Compile + PowerHAL Fixed Performance + RAM Trim (may take 10-25s)...",
+                ShizukuShellRunner::applyPerformanceBoostAndCompile));
+        card2.addView(aotBoostBtn);
+
+        // Downscale selector row
+        TextView scaleLabel = makeText(
+                "GPU Load / Game Resolution Scaling (Teamfight FPS Stability):",
+                11, TEXT_MUTED, true);
+        scaleLabel.setPadding(0, dp(10), 0, dp(2));
+        card2.addView(scaleLabel);
+
+        LinearLayout scaleRow = new LinearLayout(this);
+        scaleRow.setOrientation(LinearLayout.HORIZONTAL);
+        scaleRow.addView(makeScaleBtn("100% Native", "1.0"));
+        scaleRow.addView(makeScaleBtn("90% Smooth", "0.9"));
+        scaleRow.addView(makeScaleBtn("85% Max FPS", "0.85"));
+        card2.addView(scaleRow);
+
+        Button checkCfgBtn = makeButton("CHECK REAL FPS (GFXINFO) & SYSTEM CONFIG", BTN_DARK, TEXT_PRIMARY);
         checkCfgBtn.setOnClickListener(v -> runShizukuTask(
-                "Querying system settings & cmd game...",
-                ShizukuShellRunner::readCurrentConfig));
+                "Querying Display Mode, GameManager & MLBB Real Frame Stats...",
+                ShizukuShellRunner::readCurrentConfigAndRealFps));
         card2.addView(checkCfgBtn);
 
-        Button resetBtn = makeButton("RESET TO DEFAULT", ACCENT_RED, Color.WHITE);
+        Button resetBtn = makeButton("RESET ALL TO DEFAULT", ACCENT_RED, Color.WHITE);
         resetBtn.setOnClickListener(v -> runShizukuTask(
-                "Resetting display preference, device_name & MLBB game mode...",
-                ShizukuShellRunner::resetToDefault));
+                "Resetting display preference, thermal override, power mode & MLBB game mode...",
+                () -> ShizukuShellRunner.resetToDefault(originalHardwareModel)));
         card2.addView(resetBtn);
 
         Button launchMlbbBtn = makeButton("OPEN MOBILE LEGENDS", BTN_DARK, ACCENT_GREEN);
@@ -193,7 +238,7 @@ public class MainActivity extends Activity {
 
         // Card 3: LSPatch / Xposed Spoofer Engine
         LinearLayout card3 = createCard();
-        card3.addView(makeSectionHeader("3. LSPATCH / XPOSED TRANSSION SPOOFER", ACCENT_AMBER));
+        card3.addView(makeSectionHeader("3. DEEP DEVICE & GPU SPOOFER (SHIZUKU + LSPATCH/XPOSED)", ACCENT_AMBER));
         spoofStatusView = makeText("", 12, TEXT_MUTED, false);
         spoofStatusView.setPadding(0, dp(6), 0, dp(8));
         card3.addView(spoofStatusView);
@@ -204,7 +249,7 @@ public class MainActivity extends Activity {
             RadioButton rb = new RadioButton(this);
             rb.setText(p.displayName);
             rb.setTextColor(TEXT_PRIMARY);
-            rb.setTextSize(13);
+            rb.setTextSize(12);
             rb.setTag(p.id);
             rb.setPadding(dp(4), dp(6), dp(4), dp(6));
             profileGroup.addView(rb);
@@ -216,26 +261,31 @@ public class MainActivity extends Activity {
             View checked = group.findViewById(checkedId);
             if (checked != null && checked.getTag() instanceof String) {
                 String profileId = (String) checked.getTag();
-                saveSelectedProfile(profileId);
+                saveSelectedProfile(profileId, true);
                 updateSpoofStatusText(profileId);
-                appendLog("Saved spoof target: " + profileId);
+                updateDeviceMonitor();
             }
         });
         card3.addView(profileGroup);
 
+        Button verifySpoofBtn = makeButton(
+                "VERIFY & PREVIEW SPOOF PAYLOAD", ACCENT_PURPLE, Color.WHITE);
+        verifySpoofBtn.setOnClickListener(v -> previewSpoofPayload());
+        card3.addView(verifySpoofBtn);
+
         TextView lspatchNote = makeText(
-                "Full Transsion Spoof (via LSPatch):\n"
-                        + "- Pinapalitan ang Build.*, ro.product.tr_*, persist.sys.tran.device.name, MT6878 props, Settings device_name, at Display.getRefreshRate()=165Hz.\n"
-                        + "- Piliin ang 'Infinix X6871' kung gusto ng official Transsion 144Hz profile o 'ASUS_AI2401_A' para sa 165Hz.\n"
-                        + "BABALA: High Ban Risk ang pag-patch ng MLBB APK. Sa main account, gamitin lang ang Shizuku Bypass sa taas.",
-                12, ACCENT_AMBER, false);
+                "How Deep Spoofing Works:\n"
+                        + "1. Multi-Bridge Sync: Automatically syncs via ContentProvider, XSharedPreferences (0644), Settings.Global (mlbb_spoof_profile), and MLBB external files dir.\n"
+                        + "2. Deep Hooks: Spoofs Build.*, SystemProperties.get/native_get, GLES20/30 GL_RENDERER & GL_VENDOR (Adreno 750 / Adreno 830), Display.Mode 165Hz, and Surface.setFrameRate().\n"
+                        + "3. For Zero-Modify Safe Mode on unpatched MLBB: Use the Shizuku buttons in Card 2.",
+                11, ACCENT_AMBER, false);
         lspatchNote.setPadding(0, dp(8), 0, 0);
         card3.addView(lspatchNote);
         root.addView(card3);
 
         // Card 4: Live Command Log Console
         LinearLayout card4 = createCard();
-        card4.addView(makeSectionHeader("4. LIVE COMMAND LOG CONSOLE", ACCENT_CYAN));
+        card4.addView(makeSectionHeader("4. LIVE COMMAND & DIAGNOSTIC CONSOLE", ACCENT_CYAN));
         logConsoleView = makeText("", 11, ACCENT_GREEN, false);
         logConsoleView.setTypeface(Typeface.MONOSPACE);
         logConsoleView.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -247,25 +297,94 @@ public class MainActivity extends Activity {
         return scroll;
     }
 
+    private Button makeScaleBtn(String title, String ratio) {
+        Button btn = makeButton(title, BTN_DARK, ACCENT_CYAN);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+        lp.topMargin = dp(6);
+        lp.rightMargin = dp(4);
+        btn.setLayoutParams(lp);
+        btn.setTextSize(11);
+        btn.setOnClickListener(v -> {
+            saveDownscale(ratio);
+            DisplayModeSpec spec = detectPeakDisplayModeSpec();
+            SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(loadSavedProfileId());
+            int targetFps = Math.max(spec.roundedHz, Math.round(p.targetRefreshRate));
+            runShizukuTask(
+                    "Setting GameManager downscale=" + ratio + " @ " + targetFps + " FPS...",
+                    () -> ShizukuShellRunner.applyDownscalePreset(ratio, targetFps));
+        });
+        return btn;
+    }
+
     private void refreshAllStatus() {
         updateDeviceMonitor();
         updateShizukuStatus();
         updateSpoofStatusText(loadSavedProfileId());
     }
 
+    private DisplayModeSpec detectPeakDisplayModeSpec() {
+        DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        Display display = dm != null ? dm.getDisplay(Display.DEFAULT_DISPLAY) : null;
+        if (display == null) {
+            return DisplayModeSpec.fallback144();
+        }
+        Display.Mode[] modes = display.getSupportedModes();
+        if (modes == null || modes.length == 0) {
+            Display.Mode current = display.getMode();
+            if (current != null) {
+                return new DisplayModeSpec(
+                        current.getModeId(),
+                        current.getPhysicalWidth(),
+                        current.getPhysicalHeight(),
+                        current.getRefreshRate());
+            }
+            return DisplayModeSpec.fallback144();
+        }
+        Display.Mode best = modes[0];
+        for (Display.Mode m : modes) {
+            if (m.getRefreshRate() > best.getRefreshRate()
+                    || (Math.abs(m.getRefreshRate() - best.getRefreshRate()) < 0.01f
+                    && m.getPhysicalWidth() >= best.getPhysicalWidth())) {
+                best = m;
+            }
+        }
+        return new DisplayModeSpec(
+                best.getModeId(),
+                best.getPhysicalWidth(),
+                best.getPhysicalHeight(),
+                best.getRefreshRate());
+    }
+
     private void updateDeviceMonitor() {
+        SpoofProfiles.Profile target = SpoofProfiles.getOrDefault(loadSavedProfileId());
+        DisplayModeSpec peakSpec = detectPeakDisplayModeSpec();
+        if (applyNativePeakBtn != null) {
+            applyNativePeakBtn.setText(
+                    "LOCK NATIVE HARDWARE PEAK (" + peakSpec.roundedHz + "Hz EXACT)");
+        }
+
         StringBuilder sb = new StringBuilder();
-        sb.append("Model       : ").append(Build.BRAND).append(' ').append(Build.MODEL).append('\n');
-        sb.append("Device Name : ").append(readGlobalDeviceName()).append('\n');
-        sb.append("Android     : ").append(Build.VERSION.RELEASE)
-                .append(" (SDK ").append(Build.VERSION.SDK_INT).append(")\n");
+        sb.append("Real HW     : ").append(Build.BRAND).append(' ').append(Build.MODEL).append('\n');
+        sb.append("Spoof Target: ").append(target.model)
+                .append(" (").append(target.socModel).append(")\n");
+        sb.append("Spoof GPU   : ").append(target.gpuVendor)
+                .append(" / ").append(target.gpuRenderer).append('\n');
+        sb.append("Global Name : ").append(readGlobalSetting("device_name")).append('\n');
+        sb.append("Global Sync : ").append(readGlobalSetting(SpoofProfiles.GLOBAL_SETTING_PROFILE_KEY)).append('\n');
+        sb.append("Android SDK : ").append(Build.VERSION.RELEASE)
+                .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
 
         DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         Display display = dm != null ? dm.getDisplay(Display.DEFAULT_DISPLAY) : null;
         if (display != null) {
             Display.Mode current = display.getMode();
-            sb.append(String.format(Locale.US, "Live Hz     : %.2f Hz (%dx%d)\n",
-                    current.getRefreshRate(), current.getPhysicalWidth(), current.getPhysicalHeight()));
+            sb.append(String.format(Locale.US, "Live Display: %.2f Hz (%dx%d, id=%d)\n",
+                    current.getRefreshRate(), current.getPhysicalWidth(),
+                    current.getPhysicalHeight(), current.getModeId()));
+            sb.append(String.format(Locale.US, "Peak HW Mode: id=%d (%dx%d @ %s Hz)\n",
+                    peakSpec.modeId, peakSpec.width, peakSpec.height,
+                    Float.toString(peakSpec.exactRefreshRate)));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 sb.append("User Pref   : ").append(readUserPreferredModeText(display, dm)).append('\n');
             }
@@ -275,14 +394,15 @@ public class MainActivity extends Activity {
                         m.getModeId(), m.getPhysicalWidth(), m.getPhysicalHeight(), m.getRefreshRate()));
             }
         }
-        sb.append("MLBB        : ").append(isPackageInstalled(MLBB_PACKAGE) ? "Installed" : "Not Found");
+        sb.append("Downscale   : ").append(loadSavedDownscale()).append('\n');
+        sb.append("MLBB Status : ").append(isPackageInstalled(MLBB_PACKAGE) ? "Installed" : "Not Found");
         deviceInfoView.setText(sb.toString().trim());
     }
 
-    private String readGlobalDeviceName() {
+    private String readGlobalSetting(String key) {
         try {
-            String name = Settings.Global.getString(getContentResolver(), "device_name");
-            return name != null ? name : "Unknown";
+            String val = Settings.Global.getString(getContentResolver(), key);
+            return (val != null && !val.isEmpty()) ? val : "Not Set";
         } catch (Throwable t) {
             return "Unavailable";
         }
@@ -307,9 +427,9 @@ public class MainActivity extends Activity {
                             pref.getModeId(), pref.getRefreshRate());
                 }
             }
-            return "None (-1)";
+            return "Dynamic (None)";
         } catch (Throwable t) {
-            return "Use CHECK CONFIG button";
+            return "Use CHECK REAL FPS button";
         }
     }
 
@@ -321,7 +441,7 @@ public class MainActivity extends Activity {
                     ? "OPEN SHIZUKU APP"
                     : "SHIZUKU NOT INSTALLED");
         } else if (ShizukuShellRunner.hasPermission()) {
-            shizukuStatusBadge.setText("Status: Connected & Authorized");
+            shizukuStatusBadge.setText("Status: Connected & Authorized (UID 2000 Ready)");
             shizukuStatusBadge.setTextColor(ACCENT_GREEN);
             shizukuAuthBtn.setText("SHIZUKU AUTHORIZED (READY)");
         } else {
@@ -333,9 +453,43 @@ public class MainActivity extends Activity {
 
     private void updateSpoofStatusText(String profileId) {
         SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(profileId);
+        boolean selfHooked = "true".equals(System.getProperty("mlbb.spoof.hook.active"));
         spoofStatusView.setText(
-                "Module Status : Ready for LSPatch / Xposed Scope (com.mobile.legends)\n"
-                        + "Active Target : " + p.model + " (" + p.manufacturer + " / " + p.socModel + ")");
+                "Active Profile : " + p.marketName + " [" + p.model + "]\n"
+                        + "Spoof SoC/GPU  : " + p.socManufacturer + " " + p.socModel
+                        + " / " + p.gpuRenderer + " (" + Math.round(p.targetRefreshRate) + "Hz)\n"
+                        + "Config Bridge  : Provider Ready + Prefs (0644)"
+                        + (selfHooked ? " + Xposed Self-Verified" : ""));
+    }
+
+    private void previewSpoofPayload() {
+        SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(loadSavedProfileId());
+        Map<String, String> overrides = DeviceSpoofHook.buildPropertyOverrides(p);
+        DisplayModeSpec hwPeak = detectPeakDisplayModeSpec();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== SPOOF PAYLOAD VERIFICATION (").append(p.id).append(") ===\n");
+        sb.append("Build.MANUFACTURER : ").append(p.manufacturer).append('\n');
+        sb.append("Build.BRAND        : ").append(p.brand).append('\n');
+        sb.append("Build.MODEL        : ").append(p.model).append('\n');
+        sb.append("Build.DEVICE       : ").append(p.device).append('\n');
+        sb.append("Build.PRODUCT      : ").append(p.product).append('\n');
+        sb.append("Build.HARDWARE     : ").append(p.hardware).append('\n');
+        sb.append("Build.SOC_MODEL    : ").append(p.socModel).append('\n');
+        sb.append("Build.FINGERPRINT  : ").append(p.fingerprint).append('\n');
+        sb.append("GLES GL_VENDOR     : ").append(p.gpuVendor).append('\n');
+        sb.append("GLES GL_RENDERER   : ").append(p.gpuRenderer).append('\n');
+        sb.append("ro.product.model   : ").append(overrides.get("ro.product.model")).append('\n');
+        sb.append("ro.soc.model       : ").append(overrides.get("ro.soc.model")).append('\n');
+        sb.append("ro.product.tr_model: ")
+                .append(DeviceSpoofHook.resolvePropertyOverride("ro.product.tr_mi.model", overrides, p))
+                .append('\n');
+        sb.append("persist.sys.tran   : ").append(overrides.get("persist.sys.tran.device.name")).append('\n');
+        sb.append("Target Spoof Hz    : ").append(p.targetRefreshRate).append(" Hz\n");
+        sb.append("Mapped HW Mode ID  : id=").append(hwPeak.modeId)
+                .append(" (").append(hwPeak.width).append('x').append(hwPeak.height)
+                .append(" @ ").append(hwPeak.exactRefreshRate).append(" Hz)");
+        appendLog(sb.toString());
     }
 
     private void handleShizukuAuth() {
@@ -391,21 +545,62 @@ public class MainActivity extends Activity {
 
     private String loadSavedProfileId() {
         SharedPreferences prefs = getSharedPreferences(SpoofProfiles.PREFS_NAME, MODE_PRIVATE);
-        return prefs.getString(SpoofProfiles.KEY_SELECTED_PROFILE, SpoofProfiles.DEFAULT_PROFILE_KEY);
+        String raw = prefs.getString(SpoofProfiles.KEY_SELECTED_PROFILE, SpoofProfiles.DEFAULT_PROFILE_KEY);
+        return SpoofProfiles.getOrDefault(raw).id;
     }
 
-    @SuppressWarnings("deprecation")
-    private void saveSelectedProfile(String profileId) {
+    private String loadSavedDownscale() {
+        SharedPreferences prefs = getSharedPreferences(SpoofProfiles.PREFS_NAME, MODE_PRIVATE);
+        return prefs.getString(SpoofProfiles.KEY_DOWNSCALE_FACTOR, "1.0");
+    }
+
+    @SuppressLint("ApplySharedPref")
+    private void saveDownscale(String ratio) {
+        getSharedPreferences(SpoofProfiles.PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(SpoofProfiles.KEY_DOWNSCALE_FACTOR, ratio)
+                .commit();
+        makePrefsWorldReadable();
+    }
+
+    @SuppressLint("SetWorldReadable")
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private void makePrefsWorldReadable() {
+        try {
+            File dataDir = new File(getApplicationInfo().dataDir);
+            dataDir.setExecutable(true, false);
+            dataDir.setReadable(true, false);
+
+            File prefsDir = new File(dataDir, "shared_prefs");
+            if (prefsDir.exists()) {
+                prefsDir.setExecutable(true, false);
+                prefsDir.setReadable(true, false);
+            }
+
+            File prefsFile = new File(prefsDir, SpoofProfiles.PREFS_NAME + ".xml");
+            if (prefsFile.exists()) {
+                prefsFile.setReadable(true, false);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @SuppressLint("ApplySharedPref")
+    private void saveSelectedProfile(String profileId, boolean logAndSyncShizuku) {
         getSharedPreferences(SpoofProfiles.PREFS_NAME, MODE_PRIVATE)
                 .edit()
                 .putString(SpoofProfiles.KEY_SELECTED_PROFILE, profileId)
-                .apply();
-        try {
-            getSharedPreferences(SpoofProfiles.PREFS_NAME, MODE_WORLD_READABLE)
-                    .edit()
-                    .putString(SpoofProfiles.KEY_SELECTED_PROFILE, profileId)
-                    .apply();
-        } catch (SecurityException ignored) {
+                .commit();
+        makePrefsWorldReadable();
+
+        if (logAndSyncShizuku) {
+            SpoofProfiles.Profile p = SpoofProfiles.getOrDefault(profileId);
+            appendLog("Selected Spoof Target: " + p.model + " (" + p.socModel + " / " + p.gpuRenderer + ")");
+            if (ShizukuShellRunner.isBinderAlive() && ShizukuShellRunner.hasPermission()) {
+                runShizukuTask(
+                        "Auto-syncing profile bridge via Shizuku...",
+                        () -> ShizukuShellRunner.syncProfileBridge(p));
+            }
         }
     }
 
@@ -414,8 +609,8 @@ public class MainActivity extends Activity {
         String existing = logConsoleView.getText().toString();
         String line = "[" + time + "] " + message;
         String updated = existing.isEmpty() ? line : existing + "\n" + line;
-        if (updated.length() > 6000) {
-            updated = updated.substring(updated.length() - 6000);
+        if (updated.length() > 8000) {
+            updated = updated.substring(updated.length() - 8000);
         }
         logConsoleView.setText(updated);
     }
@@ -460,7 +655,7 @@ public class MainActivity extends Activity {
         Button btn = new Button(this);
         btn.setText(label);
         btn.setTextColor(textColor);
-        btn.setTextSize(13);
+        btn.setTextSize(12);
         btn.setTypeface(null, Typeface.BOLD);
         btn.setAllCaps(false);
         btn.setGravity(Gravity.CENTER);

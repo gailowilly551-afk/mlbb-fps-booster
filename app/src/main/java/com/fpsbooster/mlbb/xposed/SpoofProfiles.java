@@ -1,19 +1,43 @@
 package com.fpsbooster.mlbb.xposed;
 
+import android.os.Environment;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Shared catalog of whitelisted flagship device profiles used by both the UI and Xposed hook.
+ * Shared catalog of whitelisted 165Hz flagship gaming device profiles used by the UI, Shizuku engine,
+ * ContentProvider bridge, and Xposed/LSPatch hook.
  */
 public final class SpoofProfiles {
 
     public static final String PREFS_NAME = "spoof_prefs";
     public static final String KEY_SELECTED_PROFILE = "selected_profile";
+    public static final String KEY_DOWNSCALE_FACTOR = "downscale_factor";
     public static final String DEFAULT_PROFILE_KEY = "ASUS_AI2401_A";
 
-    /** Immutable device identity values applied to Build, SystemProperties, and Settings. */
+    public static final String GLOBAL_SETTING_PROFILE_KEY = "mlbb_spoof_profile";
+    public static final String PROVIDER_AUTHORITY = "com.fpsbooster.mlbb.provider";
+
+    /** Returns external/tmp config file paths readable by com.mobile.legends without special permissions. */
+    public static String[] getBridgeFilePaths() {
+        String extRoot;
+        try {
+            extRoot = Environment.getExternalStorageDirectory().getPath();
+        } catch (Throwable t) {
+            extRoot = "/storage/emulated/0";
+        }
+        return new String[]{
+                extRoot + "/Android/data/com.mobile.legends/files/.mlbb_spoof_profile",
+                extRoot + "/Android/media/com.mobile.legends/.mlbb_spoof_profile",
+                "/storage/emulated/0/Android/data/com.mobile.legends/files/.mlbb_spoof_profile",
+                "/storage/emulated/0/Android/media/com.mobile.legends/.mlbb_spoof_profile",
+                "/data/local/tmp/mlbb_spoof_profile.txt"
+        };
+    }
+
+    /** Immutable device identity values applied to Build, SystemProperties, GLES, and Settings. */
     public static final class Profile {
         public final String id;
         public final String displayName;
@@ -27,6 +51,10 @@ public final class SpoofProfiles {
         public final String hardware;
         public final String socManufacturer;
         public final String socModel;
+        public final String gpuVendor;
+        public final String gpuRenderer;
+        public final String fingerprint;
+        public final float targetRefreshRate;
 
         public Profile(
                 String id,
@@ -40,7 +68,11 @@ public final class SpoofProfiles {
                 String board,
                 String hardware,
                 String socManufacturer,
-                String socModel) {
+                String socModel,
+                String gpuVendor,
+                String gpuRenderer,
+                String fingerprint,
+                float targetRefreshRate) {
             this.id = id;
             this.displayName = displayName;
             this.marketName = marketName;
@@ -53,6 +85,10 @@ public final class SpoofProfiles {
             this.hardware = hardware;
             this.socManufacturer = socManufacturer;
             this.socModel = socModel;
+            this.gpuVendor = gpuVendor;
+            this.gpuRenderer = gpuRenderer;
+            this.fingerprint = fingerprint;
+            this.targetRefreshRate = targetRefreshRate;
         }
     }
 
@@ -62,7 +98,7 @@ public final class SpoofProfiles {
         Map<String, Profile> map = new LinkedHashMap<>();
         map.put("ASUS_AI2401_A", new Profile(
                 "ASUS_AI2401_A",
-                "ROG Phone 8 Pro (ASUS_AI2401_A - 165Hz)",
+                "ASUS_AI2401_A (ROG Phone 8 Pro — 165Hz / Adreno 750)",
                 "ROG Phone 8 Pro",
                 "ASUS",
                 "asus",
@@ -72,10 +108,31 @@ public final class SpoofProfiles {
                 "pineapple",
                 "qcom",
                 "Qualcomm",
-                "SM8650"));
+                "SM8650",
+                "Qualcomm",
+                "Adreno (TM) 750",
+                "asus/WW_AI2401/AI2401:14/UKQ1.230804.001/34.1420.1420.407:user/release-keys",
+                165.0f));
+        map.put("ASUS_AI2501", new Profile(
+                "ASUS_AI2501",
+                "ASUS_AI2501 (ROG Phone 9 Pro — 165Hz / Adreno 830)",
+                "ROG Phone 9 Pro",
+                "ASUS",
+                "asus",
+                "WW_AI2501",
+                "AI2501",
+                "ASUS_AI2501",
+                "sun",
+                "qcom",
+                "Qualcomm",
+                "SM8750",
+                "Qualcomm",
+                "Adreno (TM) 830",
+                "asus/WW_AI2501/AI2501:15/AQ3A.240812.002/35.1210.1210.258:user/release-keys",
+                165.0f));
         map.put("NX769J", new Profile(
                 "NX769J",
-                "RedMagic 9 Pro (NX769J - Gaming 144/165Hz)",
+                "NX769J (RedMagic 9 Pro — 165Hz / Adreno 750)",
                 "REDMAGIC 9 Pro",
                 "nubia",
                 "nubia",
@@ -85,33 +142,11 @@ public final class SpoofProfiles {
                 "pineapple",
                 "qcom",
                 "Qualcomm",
-                "SM8650"));
-        map.put("PJZ110", new Profile(
-                "PJZ110",
-                "OnePlus 13 (PJZ110 - Snapdragon 8 Elite)",
-                "OnePlus 13",
-                "OnePlus",
-                "OnePlus",
-                "PJZ110",
-                "OP5D3DL1",
-                "PJZ110",
-                "sun",
-                "qcom",
+                "SM8650",
                 "Qualcomm",
-                "SM8750"));
-        map.put("Infinix X6871", new Profile(
-                "Infinix X6871",
-                "Infinix GT 20 Pro (Infinix X6871 - Transsion 144Hz)",
-                "Infinix GT 20 Pro",
-                "INFINIX",
-                "Infinix",
-                "X6871-OP",
-                "Infinix-X6871",
-                "Infinix X6871",
-                "Infinix-X6871",
-                "mt6896",
-                "MediaTek",
-                "MT6896"));
+                "Adreno (TM) 750",
+                "nubia/NX769J/NX769J:14/UKQ1.230804.001/20240515.172512:user/release-keys",
+                165.0f));
         PROFILES = Collections.unmodifiableMap(map);
     }
 
@@ -123,7 +158,7 @@ public final class SpoofProfiles {
     }
 
     public static Profile getOrDefault(String id) {
-        Profile profile = id != null ? PROFILES.get(id) : null;
+        Profile profile = id != null ? PROFILES.get(id.trim()) : null;
         return profile != null ? profile : PROFILES.get(DEFAULT_PROFILE_KEY);
     }
 }
