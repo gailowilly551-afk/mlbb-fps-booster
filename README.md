@@ -2,32 +2,100 @@
 
 A 2-in-1 Android 10–16 (`minSdk 29`, `targetSdk 35`) utility combining a **Shizuku System-Level Real FPS & Performance Engine** (no root / no APK patch required) with a **Deep LSPatch / Xposed Device & GPU Spoofing Module** (`DeviceSpoofHook`).
 
-## Key Features
+---
 
-### 1. Shizuku Real FPS & Performance Engine (`ShizukuShellRunner`)
-- **Dynamic Hardware Peak Hz Lock:** Automatically detects the exact highest physical `Display.Mode` (`modeId`, `width`, `height`, and exact float `refreshRate`, e.g., `1080x2436 @ 144.00002 Hz` or `120.0 Hz`) via `DisplayManager` and applies `cmd display set-user-preferred-display-mode <w> <h> <exact_hz> 0`.
-- **Smart Transsion (HiOS/XOS) & Multi-OEM Bypass:** Writes the true hardware maximum integer Hz (`144` / `120`) to `tran_refresh_mode`, `tran_need_recovery_refresh_rate`, `user_refresh_rate`, `peak_refresh_rate`, `min_refresh_rate`, `miui_refresh_rate`, and `oplus_customize_screen_refresh_rate` so OEM controllers never reject out-of-range values or reset back to 60Hz, while disabling `tran_high_temperature_limit_refresh_rate` and `tran_fps_stabilization`.
-- **Android 12–16 GameManager Overlay + PowerHAL + Thermal Override:**
-  - Configures `device_config put game_overlay com.mobile.legends mode=2,downscaleFactor=<ratio>,fps=<target>,loadingBoost=999999999` and `cmd game set --mode 2`.
-  - Locks sustained CPU/GPU frequencies via `cmd power set-fixed-performance-mode-enabled true`.
-  - Prevents thermal refresh-rate throttling via `cmd thermalservice override-status 0`.
-  - Eliminates SurfaceFlinger VSync backpressure via `setprop debug.sf.latch_unsignaled 1`, `setprop debug.sf.disable_backpressure 1`, and `setprop debug.hwui.use_hint_manager true`.
-- **AOT DEX Speed Compilation & Pre-Match RAM Trim:**
-  - Runs `cmd package compile -m speed -f com.mobile.legends` and `am kill-all` to eliminate runtime JIT compilation stutters during 5v5 teamfights.
-- **Real Rendered FPS Verification:** Queries `dumpsys gfxinfo com.mobile.legends` alongside `cmd display` and `cmd game` to inspect real rendered frame counts and jank percentiles.
+## Kailangan pa ba i-download ang Latest LSPatch? (Do You Need LSPatch?)
 
-### 2. Deep LSPatch / Xposed Device & GPU Spoofer (`DeviceSpoofHook`)
-- **4-Layer Cross-Process Config Sync (Works on Android 11–16, LSPosed & Rootless LSPatch):**
-  1. External/Tmp Bridge Files (`/storage/emulated/0/Android/data/com.mobile.legends/files/.mlbb_spoof_profile`, `/data/local/tmp/mlbb_spoof_profile.txt`)
-  2. `Settings.Global` Bridge (`mlbb_spoof_profile` & `device_name`)
-  3. Exported Read-Only `ContentProvider` (`SpoofConfigProvider` at `content://com.fpsbooster.mlbb.provider/config`)
-  4. `XSharedPreferences` with `xposedsharedprefs` manifest metadata and `0644` permissions
-- **Complete Identity & GPU Spoofing:**
-  - Spoofs `android.os.Build.*` (`MANUFACTURER`, `BRAND`, `MODEL`, `DEVICE`, `PRODUCT`, `BOARD`, `HARDWARE`, `SOC_MANUFACTURER`, `SOC_MODEL`, `FINGERPRINT`, `SKU`, `ODM_SKU`).
-  - Hooks `SystemProperties.get`, `SystemProperties.native_get`, and `System.getProperty` (scrubbing `ro.product.tr_*`, `persist.sys.tran.*`, and MediaTek props).
-  - Hooks OpenGL ES `GLES10` / `GLES20` / `GLES30` `glGetString(GL_VENDOR)` and `glGetString(GL_RENDERER)` (`Adreno (TM) 750`, `Adreno (TM) 830`, `Mali-G610 MC6`) so Unity's `SystemInfo.graphicsDeviceName` matches the spoofed flagship device.
-  - Hooks `Display.getRefreshRate()`, `Display.Mode.getRefreshRate()` (mapped to the real peak hardware `modeId`), `Surface.setFrameRate()` (preventing 60Hz down-throttling), and `Activity.onResume()` window `preferredDisplayModeId`.
-- **Built-in 165Hz Flagship Profiles (`SpoofProfiles`):**
-  - `ASUS_AI2401_A` (ROG Phone 8 Pro — 165Hz / Adreno 750)
-  - `ASUS_AI2501` (ROG Phone 9 Pro — 165Hz / Adreno 830)
-  - `NX769J` (RedMagic 9 Pro — 165Hz / Adreno 750)
+Depende sa gusto mong gawin—**pwede itong gamitin nang WALANG LSPatch**, o **KASAMA ang LSPatch/LSPosed**:
+
+| Mode | Kailangan ba ng LSPatch? | Ano ang Nagagawa? | Account Safety |
+| :--- | :--- | :--- | :--- |
+| **Mode 1: Shizuku Only (Safe Mode)** | **HINDI KAILANGAN** (Shizuku app lang) | Ni-la-lock ang totoong peak hardware Hz (`120Hz` / `144Hz` / `165Hz`), bina-bypass ang Transsion (HiOS) / OEM refresh rate & thermal caps, sine-set ang global `device_name`, ina-activate ang Android `GameManager` Performance Mode + `PowerHAL` CPU/GPU boost, at nag-AOT `speed` compile para walang frame drop sa clash. | **100% SAFE (Zero Ban Risk)** — Walang binabago sa MLBB APK. |
+| **Mode 2: Shizuku + LSPatch (No-Root Deep Spoof)** | **OO** (Gamitin ang **LSPatch v0.6+** o **JingMatrix LSPatch** para sa Android 14–16) | Ini-inject ang `DeviceSpoofHook` sa loob ng MLBB para ma-spoof ang `Build.*`, `SystemProperties`, OpenGL GPU (`Adreno 750` / `Adreno 830`), at `Display.Mode` `165Hz`—para lumabas ang nakatagong **Ultra (120/144/165 FPS)** setting sa mga phones na hindi pa whitelisted ni Moonton. | **May Ban Risk sa Main Account** dahil napapalitan ang signature ng MLBB APK kapag naka-LSPatch. Gamitin muna sa smurf/dummy account. |
+| **Mode 3: LSPosed + Shizuku (Rooted Devices)** | **HINDI** (LSPosed Manager ang gamit) | Systemless hook sa `com.mobile.legends` nang hindi binabago ang APK signature ng MLBB, kasabay ng Shizuku hardware Hz lock. | **Mas Safe kaysa LSPatch** (walang APK signature modification). |
+
+---
+
+## Paano Gamitin ang APK (Step-by-Step Guide)
+
+### Paraan 1: Shizuku Only Mode (100% Legal / Safe sa Main Account — Walang LSPatch)
+Gamitin ito kung meron ka nang **High / Super / Ultra Frame Rate** sa MLBB settings pero bumabagsak sa **60Hz / 90Hz** ang screen mo o nagla-lag sa 5v5 clash:
+
+1. I-install ang **Shizuku** app at ang **[MLBB-165FPS-Booster-v1.0.0.apk](app/build/outputs/apk/debug/MLBB-165FPS-Booster-v1.0.0.apk)**.
+2. Buksan ang **Shizuku** at i-start ito via **Wireless Debugging** (Developer Options $\rightarrow$ Wireless Debugging $\rightarrow$ Pair device with pairing code).
+3. Buksan ang **MLBB 165FPS Booster** app:
+   - Sa **Card 2**, i-tap ang **`REQUEST SHIZUKU PERMISSION`** at i-allow.
+   - Sa **Card 3**, piliin ang gusto mong profile (`ASUS_AI2401_A`, `ASUS_AI2501`, o `NX769J`).
+   - Sa **Card 2**, i-tap ang **`APPLY FULL SPOOF + REAL MAX FPS + BOOST (SHIZUKU)`** (o **`LOCK NATIVE HARDWARE PEAK`**).
+   - I-tap ang **`AOT SPEED COMPILE + RAM & POWERHAL BOOST (ANTI-LAG)`** at hintayin matapos (`10–25 seconds`).
+   - *(Optional)* Kung umiinit o kapos ang GPU sa clash, piliin ang **`90% Smooth`** o **`85% Max FPS`** sa Resolution Scaling row.
+4. I-tap ang **`OPEN MOBILE LEGENDS`** at maglaro!
+
+---
+
+### Paraan 2: Full Deep Spoof via LSPatch (Para Lumabas ang Hidden Ultra 120/144/165 FPS Toggle, No Root)
+Kung naka-lock lang sa **60 FPS (High)** o **90 FPS (Super)** ang MLBB settings mo at gusto mong palabasin ang **Ultra FPS**:
+
+1. **I-download ang Latest LSPatch:**
+   - Para sa **Android 10–13:** Official **LSPatch v0.6** (`manager-v0.6-398-release.apk`).
+   - Para sa **Android 14 / 15 / 16:** Gamitin ang updated **LSPatch (JingMatrix / Vector fork v0.7+)** na may support sa Android 14–16 API 35.
+2. **I-setup ang Shizuku + LSPatch:**
+   - I-start ang **Shizuku** via Wireless Debugging at bigyan ng Shizuku permission ang **LSPatch** at **MLBB 165FPS Booster**.
+3. **I-patch ang Mobile Legends sa LSPatch:**
+   - Buksan ang **LSPatch** $\rightarrow$ pumunta sa **Manage** tab $\rightarrow$ i-tap ang **`+` (Add)** button.
+   - Piliin ang **Select an installed app** $\rightarrow$ piliin ang **Mobile Legends: Bang Bang**.
+   - Piliin ang **Patch Mode: `Local` (Recommended)** para pwede kang magpalit ng profile (`ROG Phone 8 Pro`, `ROG Phone 9 Pro`, `RedMagic 9 Pro`) kahit kailan nang hindi nagre-repatch!
+   - *(Kung gusto mo ng standalone APK, piliin ang `Integrated` at i-embed ang `MLBB 165FPS Booster` module).*
+   - I-tap ang **Start Patch** at pagkatapos ay i-tap ang **Install** (i-uninstall muna ang original MLBB kapag nag-prompt).
+4. **I-attach ang Module sa LSPatch (`Local` Mode):**
+   - Sa **LSPatch** $\rightarrow$ **Manage** $\rightarrow$ i-tap ang **Mobile Legends: Bang Bang** $\rightarrow$ **Module Scope** $\rightarrow$ i-check ang **`MLBB 165FPS Booster`**.
+5. **I-activate ang Spoof at Real Hz Lock:**
+   - Buksan ang **MLBB 165FPS Booster** app.
+   - Piliin ang profile sa **Card 3**:
+     - `ASUS_AI2401_A (ROG Phone 8 Pro — 165Hz / Adreno 750)`
+     - `ASUS_AI2501 (ROG Phone 9 Pro — 165Hz / Adreno 830)`
+     - `NX769J (RedMagic 9 Pro — 165Hz / Adreno 750)`
+   - I-tap ang **`VERIFY & PREVIEW SPOOF PAYLOAD`** para makita ang active spoof values.
+   - Sa **Card 2**, i-tap ang **`APPLY FULL SPOOF + REAL MAX FPS + BOOST (SHIZUKU)`** para i-lock ang physical screen mo sa max Hz at i-sync ang profile bridge.
+   - Buksan ang **Mobile Legends** $\rightarrow$ pumunta sa **Settings $\rightarrow$ Frame Rate** at piliin ang **Ultra**!
+
+> **Tandaan para sa Facebook / Google Login sa LSPatch:** Dahil iba ang signature ng patched APK, mag-login gamit ang **Moonton Account** (o mag-login sa Facebook via **Browser / Chrome** habang naka-disable/uninstall muna ang Facebook app).
+
+---
+
+### Paraan 3: Rooted Devices (LSPosed + Shizuku)
+1. Buksan ang **LSPosed Manager** $\rightarrow$ **Modules** $\rightarrow$ i-enable ang **`MLBB 165FPS Booster`**.
+2. I-check sa scope ang:
+   - `Mobile Legends: Bang Bang` (`com.mobile.legends`)
+   - `MLBB 165FPS Booster` (`com.fpsbooster.mlbb`)
+3. Buksan ang **MLBB 165FPS Booster**, piliin ang profile sa **Card 3**, i-tap ang **`APPLY FULL SPOOF + REAL MAX FPS + BOOST (SHIZUKU)`** sa **Card 2**, at i-Force Stop + buksan ulit ang MLBB.
+
+---
+
+## Paliwanag sa Mga Buttons sa App
+
+- **`APPLY FULL SPOOF + REAL MAX FPS + BOOST (SHIZUKU)`:** All-in-one button na nagsi-sync ng spoof profile bridge, nagla-lock ng exact native hardware peak Hz (`120Hz`/`144Hz`/`165Hz`), nagba-bypass ng Transsion/OEM thermal & refresh rate caps, at nagse-set ng Android `GameManager` Performance Mode + `PowerHAL` Fixed Performance Mode.
+- **`LOCK NATIVE HARDWARE PEAK (<Hz> EXACT)`:** Direktang ni-la-lock ang physical panel sa pinakamataas na hardware `Display.Mode` na na-detect sa screen mo.
+- **`AOT SPEED COMPILE + RAM & POWERHAL BOOST (ANTI-LAG)`:** Nagpapatakbo ng `cmd package compile -m speed -f com.mobile.legends` at `am kill-all` para walang JIT compilation stutter sa gitna ng 5v5 clash.
+- **`100% Native` / `90% Smooth` / `85% Max FPS`:** Legal Android `GameManager` resolution scaling para bawasan ang GPU load at mapanatiling stable ang FPS sa mabibigat na teamfights.
+- **`CHECK REAL FPS (GFXINFO) & SYSTEM CONFIG`:** Binabasa ang `dumpsys gfxinfo com.mobile.legends`, `cmd display`, at `cmd game` para makita ang totoong rendered frames at jank stats.
+- **`VERIFY & PREVIEW SPOOF PAYLOAD`:** Ipinapakita sa console ang lahat ng `Build.*`, `SystemProperties`, `GL_VENDOR`, `GL_RENDERER`, at `Display.Mode` values na ipinapasa sa MLBB.
+- **`RESET ALL TO DEFAULT`:** Ibinabalik sa default ang display refresh rate, `device_name`, thermal service, power mode, at game mode.
+
+---
+
+## Built-in 165Hz Flagship Profiles (`SpoofProfiles`)
+
+- `ASUS_AI2401_A (ROG Phone 8 Pro — 165Hz / Adreno 750)`
+- `ASUS_AI2501 (ROG Phone 9 Pro — 165Hz / Adreno 830)`
+- `NX769J (RedMagic 9 Pro — 165Hz / Adreno 750)`
+
+---
+
+## Build Instructions
+
+Requires **JDK 17** and **Gradle 8.6** (`compileSdk 35`, `minSdk 29`, `targetSdk 35`):
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /opt/gradle-8.6/bin/gradle clean lintDebug assembleDebug
+```
